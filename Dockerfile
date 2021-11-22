@@ -1,30 +1,46 @@
-FROM centos:7
+# Lightweight Alpine-based pg_featureserv Docker Image
+# Author: Just van den Broecke
+FROM golang:1.15.5-alpine3.12
 
-ARG VERSION
+# Build ARGS
+ARG VERSION="latest-alpine-3.12"
 
-LABEL vendor="Crunchy Data" \
+RUN mkdir /app
+ADD . /app/
+WORKDIR /app
+RUN go build -v -ldflags "-s -w -X main.programVersion=${VERSION}"
+
+# Multi-stage build: only copy build result and resources
+FROM alpine:3.12
+
+LABEL original_developer="Crunchy Data" \
+    contributor="Just van den Broecke <justb4@gmail.com>" \
+    vendor="Crunchy Data" \
 	url="https://crunchydata.com" \
 	release="${VERSION}" \
 	org.opencontainers.image.vendor="Crunchy Data" \
-	os.version="7.7"
+	os.version="3.12"
 
-ADD ./pg_featureserv .
-ADD ./assets ./assets
+RUN apk --no-cache add ca-certificates && mkdir /app
+WORKDIR /app/
+COPY --from=0 /app/pg_featureserv /app/
+COPY --from=0 /app/assets /app/assets
 
 VOLUME ["/config"]
-VOLUME ["/assets"]
 
 USER 1001
-EXPOSE 9000
+EXPOSE 7800
 
-ENTRYPOINT ["./pg_featureserv"]
+ENTRYPOINT ["/app/pg_featureserv"]
 CMD []
 
-# To build
-# make APPVERSION=1.1 clean build build-docker
-
-# To build using binaries from golang docker image
-# make APPVERSION=1.1 clean bin-docker build-docker
-
-# To run using an image build above
-# docker run -dt -e DATABASE_URL=postgres://user:pass@host/dbname -p 9000:9000 pramsey/pg_featureserv:1.1
+# To build and run specific version
+#
+# export VERSION="latest-alpine-3.12"
+# docker build --build-arg VERSION=${VERSION} -t pramsey/pg_featureserv:${VERSION} -f Dockerfile.alpine
+#
+# Best is to use another PostGIS Docker Container whoose host is reachable from the pg_featureserv Container.
+# docker run -dt -e DATABASE_URL=postgres://user:pass@host/dbname -p 7800:7800 pramsey/pg_featureserv:${VERSION}
+#
+# See a full example using Docker Compose under examples/docker
+#
